@@ -8,7 +8,6 @@
 /* eslint valid-typeof: 0 */
 
 import invariant from 'shared/invariant';
-import {enableModernEventSystem} from 'shared/ReactFeatureFlags';
 
 const EVENT_POOL_SIZE = 10;
 
@@ -77,10 +76,8 @@ function SyntheticEvent(
   this.dispatchConfig = dispatchConfig;
   this._targetInst = targetInst;
   this.nativeEvent = nativeEvent;
-  if (!enableModernEventSystem) {
-    this._dispatchListeners = null;
-    this._dispatchInstances = null;
-  }
+  this._dispatchListeners = null;
+  this._dispatchInstances = null;
 
   const Interface = this.constructor.Interface;
   for (const propName in Interface) {
@@ -188,10 +185,8 @@ Object.assign(SyntheticEvent.prototype, {
     this.nativeEvent = null;
     this.isDefaultPrevented = functionThatReturnsFalse;
     this.isPropagationStopped = functionThatReturnsFalse;
-    if (!enableModernEventSystem) {
-      this._dispatchListeners = null;
-      this._dispatchInstances = null;
-    }
+    this._dispatchListeners = null;
+    this._dispatchInstances = null;
     if (__DEV__) {
       Object.defineProperty(
         this,
@@ -303,7 +298,12 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-function getPooledEvent(dispatchConfig, targetInst, nativeEvent, nativeInst) {
+function createOrGetPooledEvent(
+  dispatchConfig,
+  targetInst,
+  nativeEvent,
+  nativeInst,
+) {
   const EventConstructor = this;
   if (EventConstructor.eventPool.length) {
     const instance = EventConstructor.eventPool.pop();
@@ -337,8 +337,8 @@ function releasePooledEvent(event) {
 }
 
 function addEventPoolingTo(EventConstructor) {
+  EventConstructor.getPooled = createOrGetPooledEvent;
   EventConstructor.eventPool = [];
-  EventConstructor.getPooled = getPooledEvent;
   EventConstructor.release = releasePooledEvent;
 }
 

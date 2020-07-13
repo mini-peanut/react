@@ -867,6 +867,44 @@ describe('ReactDOMServerHooks', () => {
     });
   });
 
+  it('renders successfully after a component using hooks throws an error', () => {
+    function ThrowingComponent() {
+      const [value, dispatch] = useReducer((state, action) => {
+        return state + 1;
+      }, 0);
+
+      // throw an error if the count gets too high during the re-render phase
+      if (value >= 3) {
+        throw new Error('Error from ThrowingComponent');
+      } else {
+        // dispatch to trigger a re-render of the component
+        dispatch();
+      }
+
+      return <div>{value}</div>;
+    }
+
+    function NonThrowingComponent() {
+      const [count] = useState(0);
+      return <div>{count}</div>;
+    }
+
+    // First, render a component that will throw an error during a re-render triggered
+    // by a dispatch call.
+    expect(() => ReactDOMServer.renderToString(<ThrowingComponent />)).toThrow(
+      'Error from ThrowingComponent',
+    );
+
+    // Next, assert that we can render a function component using hooks immediately
+    // after an error occurred, which indictates the internal hooks state has been
+    // reset.
+    const container = document.createElement('div');
+    container.innerHTML = ReactDOMServer.renderToString(
+      <NonThrowingComponent />,
+    );
+    expect(container.children[0].textContent).toEqual('0');
+  });
+
   if (__EXPERIMENTAL__) {
     describe('useOpaqueIdentifier', () => {
       it('generates unique ids for server string render', async () => {
@@ -1042,7 +1080,7 @@ describe('ReactDOMServerHooks', () => {
 
           return (
             <div>
-              <div aria-labelledby={id}>Chid One</div>
+              <div aria-labelledby={id}>Child One</div>
               <ChildTwo id={id} />
               <div aria-labelledby={idTwo}>Child Three</div>
               <div id={idTwo}>Child Four</div>
@@ -1336,7 +1374,7 @@ describe('ReactDOMServerHooks', () => {
         ).not.toBeNull();
       });
 
-      it('useOpaqueIdentifierr: flushSync', async () => {
+      it('useOpaqueIdentifier: flushSync', async () => {
         let _setShow;
         function App() {
           const id = useOpaqueIdentifier();
@@ -1445,8 +1483,6 @@ describe('ReactDOMServerHooks', () => {
           .getAttribute('id');
         expect(serverId).not.toBeNull();
 
-        const childOneSpan = container.getElementsByTagName('span')[0];
-
         const root = ReactDOM.unstable_createRoot(container, {hydrate: true});
         root.render(<App show={false} />);
         expect(Scheduler).toHaveYielded([]);
@@ -1462,25 +1498,15 @@ describe('ReactDOMServerHooks', () => {
           // State update should trigger the ID to update, which changes the props
           // of ChildWithID. This should cause ChildWithID to hydrate before Children
 
-          expect(Scheduler).toFlushAndYieldThrough(
-            __DEV__
-              ? [
-                  'Child with ID',
-                  // Fallbacks are immediately committed in TestUtils version
-                  // of act
-                  // 'Child with ID',
-                  // 'Child with ID',
-                  'Child One',
-                  'Child Two',
-                ]
-              : [
-                  'Child with ID',
-                  'Child with ID',
-                  'Child with ID',
-                  'Child One',
-                  'Child Two',
-                ],
-          );
+          expect(Scheduler).toFlushAndYieldThrough([
+            'Child with ID',
+            // Fallbacks are immediately committed in TestUtils version
+            // of act
+            // 'Child with ID',
+            // 'Child with ID',
+            'Child One',
+            'Child Two',
+          ]);
 
           expect(child1Ref.current).toBe(null);
           expect(childWithIDRef.current).toEqual(
@@ -1500,7 +1526,9 @@ describe('ReactDOMServerHooks', () => {
         });
 
         // Children hydrates after ChildWithID
-        expect(child1Ref.current).toBe(childOneSpan);
+        expect(child1Ref.current).toBe(
+          container.getElementsByTagName('span')[0],
+        );
 
         Scheduler.unstable_flushAll();
 
@@ -1606,9 +1634,7 @@ describe('ReactDOMServerHooks', () => {
         ReactDOM.unstable_createRoot(container, {hydrate: true}).render(
           <App />,
         );
-        expect(() =>
-          expect(() => Scheduler.unstable_flushAll()).toThrow(),
-        ).toErrorDev([
+        expect(() => Scheduler.unstable_flushAll()).toErrorDev([
           'Warning: Expected server HTML to contain a matching <div> in <div>.',
         ]);
       });
@@ -1694,14 +1720,12 @@ describe('ReactDOMServerHooks', () => {
         ReactDOM.unstable_createRoot(container, {hydrate: true}).render(
           <App />,
         );
-        expect(() =>
-          expect(() => Scheduler.unstable_flushAll()).toThrow(),
-        ).toErrorDev([
+        expect(() => Scheduler.unstable_flushAll()).toErrorDev([
           'Warning: Expected server HTML to contain a matching <div> in <div>.',
         ]);
       });
 
-      it('useOpaqueIdentifier throws when there is a hydration error and we are using ID as a string', async () => {
+      it('useOpaqueIdentifier warns when there is a hydration error and we are using ID as a string', async () => {
         function Child({appId}) {
           return <div aria-labelledby={appId + ''} />;
         }
@@ -1718,12 +1742,7 @@ describe('ReactDOMServerHooks', () => {
         ReactDOM.unstable_createRoot(container, {hydrate: true}).render(
           <App />,
         );
-        expect(() =>
-          expect(() => Scheduler.unstable_flushAll()).toThrow(
-            'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
-              'Do not read the value directly.',
-          ),
-        ).toErrorDev(
+        expect(() => Scheduler.unstable_flushAll()).toErrorDev(
           [
             'Warning: The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. Do not read the value directly.',
             'Warning: Did not expect server HTML to contain a <span> in <div>.',
@@ -1732,7 +1751,7 @@ describe('ReactDOMServerHooks', () => {
         );
       });
 
-      it('useOpaqueIdentifier throws when there is a hydration error and we are using ID as a string', async () => {
+      it('useOpaqueIdentifier warns when there is a hydration error and we are using ID as a string', async () => {
         function Child({appId}) {
           return <div aria-labelledby={appId + ''} />;
         }
@@ -1749,12 +1768,7 @@ describe('ReactDOMServerHooks', () => {
         ReactDOM.unstable_createRoot(container, {hydrate: true}).render(
           <App />,
         );
-        expect(() =>
-          expect(() => Scheduler.unstable_flushAll()).toThrow(
-            'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
-              'Do not read the value directly.',
-          ),
-        ).toErrorDev(
+        expect(() => Scheduler.unstable_flushAll()).toErrorDev(
           [
             'Warning: The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. Do not read the value directly.',
             'Warning: Did not expect server HTML to contain a <span> in <div>.',
@@ -1763,7 +1777,7 @@ describe('ReactDOMServerHooks', () => {
         );
       });
 
-      it('useOpaqueIdentifier throws if you try to use the result as a string in a child component', async () => {
+      it('useOpaqueIdentifier warns if you try to use the result as a string in a child component', async () => {
         function Child({appId}) {
           return <div aria-labelledby={appId + ''} />;
         }
@@ -1779,12 +1793,7 @@ describe('ReactDOMServerHooks', () => {
         ReactDOM.unstable_createRoot(container, {hydrate: true}).render(
           <App />,
         );
-        expect(() =>
-          expect(() => Scheduler.unstable_flushAll()).toThrow(
-            'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
-              'Do not read the value directly.',
-          ),
-        ).toErrorDev(
+        expect(() => Scheduler.unstable_flushAll()).toErrorDev(
           [
             'Warning: The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. Do not read the value directly.',
             'Warning: Did not expect server HTML to contain a <div> in <div>.',
@@ -1793,7 +1802,7 @@ describe('ReactDOMServerHooks', () => {
         );
       });
 
-      it('useOpaqueIdentifier throws if you try to use the result as a string', async () => {
+      it('useOpaqueIdentifier warns if you try to use the result as a string', async () => {
         function App() {
           const id = useOpaqueIdentifier();
           return <div aria-labelledby={id + ''} />;
@@ -1806,12 +1815,7 @@ describe('ReactDOMServerHooks', () => {
         ReactDOM.unstable_createRoot(container, {hydrate: true}).render(
           <App />,
         );
-        expect(() =>
-          expect(() => Scheduler.unstable_flushAll()).toThrow(
-            'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
-              'Do not read the value directly.',
-          ),
-        ).toErrorDev(
+        expect(() => Scheduler.unstable_flushAll()).toErrorDev(
           [
             'Warning: The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. Do not read the value directly.',
             'Warning: Did not expect server HTML to contain a <div> in <div>.',
@@ -1820,7 +1824,7 @@ describe('ReactDOMServerHooks', () => {
         );
       });
 
-      it('useOpaqueIdentifier throws if you try to use the result as a string in a child component wrapped in a Suspense', async () => {
+      it('useOpaqueIdentifier warns if you try to use the result as a string in a child component wrapped in a Suspense', async () => {
         function Child({appId}) {
           return <div aria-labelledby={appId + ''} />;
         }
@@ -1842,16 +1846,14 @@ describe('ReactDOMServerHooks', () => {
           <App />,
         );
 
-        if (
-          gate(flags => flags.new && flags.deferRenderPhaseUpdateToNextBatch)
-        ) {
+        if (gate(flags => flags.deferRenderPhaseUpdateToNextBatch)) {
           expect(() => Scheduler.unstable_flushAll()).toErrorDev([
             'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
               'Do not read the value directly.',
           ]);
         } else {
-          // In the old reconciler, the error isn't surfaced to the user. That
-          // part isn't important, as long as It warns.
+          // This error isn't surfaced to the user; only the warning is.
+          // The error is just the mechanism that restarts the render.
           expect(() =>
             expect(() => Scheduler.unstable_flushAll()).toThrow(
               'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
@@ -1864,7 +1866,7 @@ describe('ReactDOMServerHooks', () => {
         }
       });
 
-      it('useOpaqueIdentifier throws if you try to add the result as a number in a child component wrapped in a Suspense', async () => {
+      it('useOpaqueIdentifier warns if you try to add the result as a number in a child component wrapped in a Suspense', async () => {
         function Child({appId}) {
           return <div aria-labelledby={+appId} />;
         }
@@ -1888,16 +1890,14 @@ describe('ReactDOMServerHooks', () => {
           <App />,
         );
 
-        if (
-          gate(flags => flags.new && flags.deferRenderPhaseUpdateToNextBatch)
-        ) {
+        if (gate(flags => flags.deferRenderPhaseUpdateToNextBatch)) {
           expect(() => Scheduler.unstable_flushAll()).toErrorDev([
             'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
               'Do not read the value directly.',
           ]);
         } else {
-          // In the old reconciler, the error isn't surfaced to the user. That
-          // part isn't important, as long as It warns.
+          // This error isn't surfaced to the user; only the warning is.
+          // The error is just the mechanism that restarts the render.
           expect(() =>
             expect(() => Scheduler.unstable_flushAll()).toThrow(
               'The object passed back from useOpaqueIdentifier is meant to be passed through to attributes only. ' +
